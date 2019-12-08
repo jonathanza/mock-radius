@@ -23,12 +23,20 @@
   },
   "homepage": "https://github.com/iostat42/mock-radius",
   "devDependencies": {
-    "code": "1.x.x",
-    "lab": "5.x.x",
-    "radclient": "1.x.x"
+    "@hapi/code": "7.0.0",
+    "@hapi/lab": "21.0.0",
+    "husky": "^3.1.0",
+    "prettier": "1.19.1",
+    "pretty-quick": "^2.0.1",
+    "radclient": "1.0.0"
   },
   "dependencies": {
-    "hoek": "2.x.x",
-    "radius": "1.x.x"
+    "@hapi/hoek": "8.5.x",
+    "radius": "1.1.4"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "pretty-quick --staged"
+    }
   }
 }
