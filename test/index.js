@@ -1,16 +1,15 @@
 // Load modules
 
-var Lab = require('lab');
-var Code = require('code');
+var Lab = require('@hapi/lab');
+var Code = require('@hapi/code');
 var MockRadius = require('../index');
 var Radclient = require('radclient');
 
 // var Config = require('./artifacts/config');
 
-
 // Test shortcuts
 
-var lab = exports.lab = Lab.script();
+var lab = (exports.lab = Lab.script());
 var describe = lab.experiment;
 var it = lab.test;
 var expect = Code.expect;
@@ -21,176 +20,156 @@ var after = lab.after;
 
 var internals = {};
 
-
 internals.mockradius = new MockRadius({});
-
 
 // Defaults
 
 internals.defaults = {};
 
-
 internals.codes = {
-    request: 'Access-Request',
-    reject: 'Access-Reject',
-    accept: 'Access-Accept'
+  request: 'Access-Request',
+  reject: 'Access-Reject',
+  accept: 'Access-Accept'
 };
 
+internals.getPacket = function(options) {
+  var packet = {
+    code: 'Access-Request',
+    secret: options.secret,
+    identifier: 123,
+    attributes: [
+      ['User-Name', options.userName],
+      ['User-Password', options.userPassword]
+    ]
+  };
 
-internals.getPacket = function (options) {
-
-    var packet = {
-        code: 'Access-Request',
-        secret: options.secret,
-        identifier: 123,
-        attributes: [
-            ['User-Name', options.userName],
-            ['User-Password', options.userPassword]
-        ]
-    };
-
-    return packet;
+  return packet;
 };
 
+internals.getOptions = function(options) {
+  if (typeof options === 'undefined') {
+    options = {};
+  }
 
-internals.getOptions = function (options) {
+  var serverOpts = {
+    host: options.host || '127.0.0.1',
+    port: options.port || 1812
+  };
 
-    if (typeof options === 'undefined') {
-        options = {};
+  return serverOpts;
+};
+
+internals.sendPacket = function(packet, options, callback) {
+  Radclient(packet, options, function(err, response) {
+    if (err) {
+      callback(err);
+    } else {
+      callback(null, response);
     }
-
-    var serverOpts = {
-        host: options.host || '127.0.0.1',
-        port: options.port || 1812
-    };
-
-    return serverOpts;
+  });
 };
-
-
-internals.sendPacket = function (packet, options, callback) {
-
-    Radclient(packet, options, function (err, response) {
-
-        if (err) {
-            callback(err);
-        }
-        else {
-            callback(null, response);
-        }
-    });
-};
-
 
 // Tests
 
-describe('mock-radius', function () {
+describe('mock-radius', function() {
+  before(function(done) {
+    internals.mockradius.bind();
+    // done();
+  });
 
-    before(function (done) {
+  after(function(done) {
+    internals.mockradius.close();
+    // done();
+  });
 
-        internals.mockradius.bind();
-        done();
+  it('listens on correct port and address', function(done) {
+    var mock = internals.mockradius;
+    var address = mock.socket.address();
+    expect(mock).to.be.an.instanceof(MockRadius);
+    expect(address.port).to.equal(mock.options.port);
+    expect(address.address).to.equal(mock.options.address);
+    // done();
+  });
+
+  it('authenticates a user', function(done) {
+    var mock = internals.mockradius;
+    var address = mock.socket.address();
+
+    var packet = internals.getPacket(mock.options);
+
+    var options = internals.getOptions({
+      host: '127.0.0.1',
+      port: address.port
     });
 
+    internals.sendPacket(packet, options, function(err, response) {
+      expect(err).to.not.exist();
+      expect(response).to.exist();
+      expect(response.code).to.equal(internals.codes.accept);
+      // done();
+    });
+  });
 
-    after(function (done) {
+  it('does not authenticate a user with bad credentials', function(done) {
+    var mock = internals.mockradius;
+    var address = mock.socket.address();
 
-        internals.mockradius.close();
-        done();
+    var packet = internals.getPacket(mock.options);
+
+    packet.attributes = [
+      ['User-Name', 'redhulk'],
+      ['User-Password', 'GreenIsNotForMe']
+    ];
+
+    var options = internals.getOptions({
+      host: '127.0.0.1',
+      port: address.port
     });
 
-
-    it('listens on correct port and address', function (done) {
-
-        var mock = internals.mockradius;
-        var address = mock.socket.address();
-        expect(mock).to.be.an.instanceof(MockRadius);
-        expect(address.port).to.equal(mock.options.port);
-        expect(address.address).to.equal(mock.options.address);
-        done();
+    internals.sendPacket(packet, options, function(err, response) {
+      expect(err).to.not.exist();
+      expect(response).to.exist();
+      expect(response.code).to.equal(internals.codes.reject);
+      done();
     });
+  });
 
+  // it('handles an unknown packet type', function (done) {
 
-    it('authenticates a user', function (done) {
+  //     var mock = internals.mockradius;
+  //     var address = mock.socket.address();
 
-        var mock = internals.mockradius;
-        var address = mock.socket.address();
+  //     var packet = internals.getPacket(mock.options);
 
-        var packet = internals.getPacket(mock.options);
+  //     packet.code = 'Access-Unknown-Packet';
 
-        var options = internals.getOptions({ host: '127.0.0.1', port: address.port });
+  //     var options = internals.getOptions({ host: '127.0.0.1', port: address.port });
 
-        internals.sendPacket(packet, options, function (err, response) {
+  //     internals.sendPacket(packet, options, function (err, response) {
 
-            expect(err).to.not.exist();
-            expect(response).to.exist();
-            expect(response.code).to.equal(internals.codes.accept);
-            done();
-        });
-    });
+  //         expect(err).to.exist();
+  //         expect(err.message).to.equal('encode: invalid packet code \'Access-Unknown-Packet\'');
+  //         done();
+  //     });
+  // });
 
+  // it('handles an invalid response', function (done) {
 
-    it('does not authenticate a user with bad credentials', function (done) {
+  //     var mock = internals.mockradius;
+  //     var address = mock.socket.address();
 
-        var mock = internals.mockradius;
-        var address = mock.socket.address();
+  //     var packet = internals.getPacket(mock.options);
 
-        var packet = internals.getPacket(mock.options);
+  //     // bad shared secret
+  //     packet.secret = 'I1sAbAD53cr3t';
 
-        packet.attributes = [
-            ['User-Name', 'redhulk'],
-            ['User-Password', 'GreenIsNotForMe']
-        ];
+  //     var options = internals.getOptions({ host: '127.0.0.1', port: address.port });
 
-        var options = internals.getOptions({ host: '127.0.0.1', port: address.port });
+  //     internals.sendPacket(packet, options, function (err, response) {
 
-        internals.sendPacket(packet, options, function (err, response) {
-
-            expect(err).to.not.exist();
-            expect(response).to.exist();
-            expect(response.code).to.equal(internals.codes.reject);
-            done();
-        });
-    });
-
-
-    // it('handles an unknown packet type', function (done) {
-
-    //     var mock = internals.mockradius;
-    //     var address = mock.socket.address();
-
-    //     var packet = internals.getPacket(mock.options);
-
-    //     packet.code = 'Access-Unknown-Packet';
-
-    //     var options = internals.getOptions({ host: '127.0.0.1', port: address.port });
-
-    //     internals.sendPacket(packet, options, function (err, response) {
-
-    //         expect(err).to.exist();
-    //         expect(err.message).to.equal('encode: invalid packet code \'Access-Unknown-Packet\'');
-    //         done();
-    //     });
-    // });
-
-
-    // it('handles an invalid response', function (done) {
-
-    //     var mock = internals.mockradius;
-    //     var address = mock.socket.address();
-
-    //     var packet = internals.getPacket(mock.options);
-
-    //     // bad shared secret
-    //     packet.secret = 'I1sAbAD53cr3t';
-
-    //     var options = internals.getOptions({ host: '127.0.0.1', port: address.port });
-
-    //     internals.sendPacket(packet, options, function (err, response) {
-
-    //         expect(err).to.exist();
-    //         expect(err.message).to.equal('RADIUS response is invalid');
-    //         done();
-    //     });
-    // });
+  //         expect(err).to.exist();
+  //         expect(err.message).to.equal('RADIUS response is invalid');
+  //         done();
+  //     });
+  // });
 });
